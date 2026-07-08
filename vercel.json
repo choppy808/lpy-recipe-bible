@@ -4,13 +4,17 @@
     {
       "src": "api/index.ts",
       "use": "@vercel/node"
+    },
+    {
+      "src": "dist/public/**",
+      "use": "@vercel/static"
     }
   ],
   "routes": [
     { "src": "/api/(.*)", "dest": "/api/index.ts" },
     { "src": "/uploads/(.*)", "dest": "/api/index.ts" },
-    { "handle": "filesystem" },
-    { "src": "/(.*)", "dest": "/index.html" }
-  ],
-  "outputDirectory": "dist/public"
+    { "src": "/assets/(.*)", "dest": "/dist/public/assets/$1" },
+    { "src": "/(.*\\.(js|css|ico|png|jpg|svg|woff2?))", "dest": "/dist/public/$1" },
+    { "src": "/(.*)", "dest": "/dist/public/index.html" }
+  ]
 }
