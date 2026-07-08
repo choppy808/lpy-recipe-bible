@@ -2,6 +2,17 @@ import { QueryClient, QueryFunction } from "@tanstack/react-query";
 
 const API_BASE = "__PORT_5000__".startsWith("__") ? "" : "__PORT_5000__";
 
+export function getToken(): string | null {
+  // Token stored in memory via module-level variable (no localStorage)
+  return _token;
+}
+
+export function setToken(t: string | null) {
+  _token = t;
+}
+
+let _token: string | null = null;
+
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
     const text = (await res.text()) || res.statusText;
@@ -12,11 +23,15 @@ async function throwIfResNotOk(res: Response) {
 export async function apiRequest(
   method: string,
   url: string,
-  data?: unknown | undefined,
+  data?: unknown,
 ): Promise<Response> {
+  const headers: Record<string, string> = {};
+  if (data) headers["Content-Type"] = "application/json";
+  if (_token) headers["Authorization"] = `Bearer ${_token}`;
+
   const res = await fetch(`${API_BASE}${url}`, {
     method,
-    headers: data ? { "Content-Type": "application/json" } : {},
+    headers,
     body: data ? JSON.stringify(data) : undefined,
   });
 
@@ -30,7 +45,10 @@ export const getQueryFn: <T>(options: {
 }) => QueryFunction<T> =
   ({ on401: unauthorizedBehavior }) =>
   async ({ queryKey }) => {
-    const res = await fetch(`${API_BASE}${queryKey.join("/")}`);
+    const headers: Record<string, string> = {};
+    if (_token) headers["Authorization"] = `Bearer ${_token}`;
+
+    const res = await fetch(`${API_BASE}${queryKey[0] as string}`, { headers });
 
     if (unauthorizedBehavior === "returnNull" && res.status === 401) {
       return null;

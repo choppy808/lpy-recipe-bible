@@ -1,11 +1,15 @@
-import express from "express";
+import express, { Request, Response, NextFunction } from "express";
 import { Pool } from "pg";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
 import { z } from "zod";
+import bcrypt from "bcryptjs";
+import jwt from "jsonwebtoken";
 
 const app = express();
+
+const JWT_SECRET = process.env.JWT_SECRET || "lpy-secret-key-change-in-prod";
 
 // ── Database ──────────────────────────────────────────────────────────────────
 const pool = new Pool({
@@ -61,7 +65,6 @@ function rowToRecipe(row: any) {
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
-// Uploads — use /tmp on Vercel (ephemeral but works for session)
 const UPLOAD_DIR = "/tmp/lpy-uploads";
 if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
@@ -76,7 +79,30 @@ const upload = multer({
 
 app.use("/uploads", express.static(UPLOAD_DIR));
 
-// ── Zod validation schema (mirrors shared/schema.ts insertRecipeSchema) ──────
+// ── Auth middleware ───────────────────────────────────────────────────────────
+function requireAuth(req: Request, res: Response, next: NextFunction) {
+  const authHeader = req.headers.authorization;
+  const token = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
+  if (!token) return res.status(401).json({ error: "Not authenticated" });
+  try {
+    const payload = jwt.verify(token, JWT_SECRET) as any;
+    (req as any).user = payload;
+    next();
+  } catch {
+    return res.status(401).json({ error: "Invalid or expired token" });
+  }
+}
+
+function requireAdmin(req: Request, res: Response, next: NextFunction) {
+  requireAuth(req, res, () => {
+    if ((req as any).user?.role !== "admin") {
+      return res.status(403).json({ error: "Admin access required" });
+    }
+    next();
+  });
+}
+
+// ── Zod schemas ───────────────────────────────────────────────────────────────
 const insertRecipeSchema = z.object({
   recipeName: z.string().min(1),
   nameZh: z.string().nullable().optional(),
@@ -113,10 +139,97 @@ const insertRecipeSchema = z.object({
   criticalPoints: z.string().nullable().optional(),
 });
 
-// ── Routes ────────────────────────────────────────────────────────────────────
+// ── AUTH ROUTES ───────────────────────────────────────────────────────────────
 
-// GET all recipes
-app.get("/api/recipes", async (req, res) => {
+// POST /api/auth/login
+app.post("/api/auth/login", async (req, res) => {
+  const { username, password } = req.body;
+  if (!username || !password) return res.status(400).json({ error: "Username and password required" });
+  try {
+    const { rows } = await pool.query(`SELECT * FROM users WHERE username = $1`, [username.toLowerCase()]);
+    const user = rows[0];
+    if (!user) return res.status(401).json({ error: "Invalid username or password" });
+    const valid = await bcrypt.compare(password, user.password_hash);
+    if (!valid) return res.status(401).json({ error: "Invalid username or password" });
+    const token = jwt.sign(
+      { id: user.id, username: user.username, role: user.role },
+      JWT_SECRET,
+      { expiresIn: "30d" }
+    );
+    res.json({ token, user: { id: user.id, username: user.username, role: user.role } });
+  } catch (e: any) {
+    console.error("Login error:", e.message);
+    res.status(500).json({ error: "Login failed" });
+  }
+});
+
+// GET /api/auth/me — verify current token
+app.get("/api/auth/me", requireAuth, (req, res) => {
+  res.json({ user: (req as any).user });
+});
+
+// ── USER MANAGEMENT (admin only) ──────────────────────────────────────────────
+
+// GET /api/users
+app.get("/api/users", requireAdmin, async (_req, res) => {
+  try {
+    const { rows } = await pool.query(`SELECT id, username, role, created_at FROM users ORDER BY created_at ASC`);
+    res.json(rows);
+  } catch (e: any) {
+    res.status(500).json({ error: "Failed to fetch users" });
+  }
+});
+
+// POST /api/users — create a new user
+app.post("/api/users", requireAdmin, async (req, res) => {
+  const { username, password, role } = req.body;
+  if (!username || !password) return res.status(400).json({ error: "Username and password required" });
+  try {
+    const hash = await bcrypt.hash(password, 10);
+    const { rows } = await pool.query(
+      `INSERT INTO users (username, password_hash, role) VALUES ($1, $2, $3) RETURNING id, username, role, created_at`,
+      [username.toLowerCase(), hash, role === "admin" ? "admin" : "staff"]
+    );
+    res.status(201).json(rows[0]);
+  } catch (e: any) {
+    if (e.code === "23505") return res.status(409).json({ error: "Username already exists" });
+    res.status(500).json({ error: "Failed to create user" });
+  }
+});
+
+// PATCH /api/users/:id/password — change a user's password
+app.patch("/api/users/:id/password", requireAdmin, async (req, res) => {
+  const id = parseInt(req.params.id as string);
+  const { password } = req.body;
+  if (!password) return res.status(400).json({ error: "Password required" });
+  try {
+    const hash = await bcrypt.hash(password, 10);
+    const { rows } = await pool.query(
+      `UPDATE users SET password_hash = $1 WHERE id = $2 RETURNING id, username, role`,
+      [hash, id]
+    );
+    if (!rows[0]) return res.status(404).json({ error: "User not found" });
+    res.json(rows[0]);
+  } catch (e: any) {
+    res.status(500).json({ error: "Failed to update password" });
+  }
+});
+
+// DELETE /api/users/:id
+app.delete("/api/users/:id", requireAdmin, async (req, res) => {
+  const id = parseInt(req.params.id as string);
+  try {
+    const { rowCount } = await pool.query(`DELETE FROM users WHERE id = $1`, [id]);
+    if (!rowCount) return res.status(404).json({ error: "User not found" });
+    res.json({ success: true });
+  } catch (e: any) {
+    res.status(500).json({ error: "Failed to delete user" });
+  }
+});
+
+// ── RECIPE ROUTES (all protected) ────────────────────────────────────────────
+
+app.get("/api/recipes", requireAuth, async (req, res) => {
   try {
     const { search, category, concept } = req.query as Record<string, string>;
     let rows;
@@ -127,27 +240,19 @@ app.get("/api/recipes", async (req, res) => {
         [q]
       ));
     } else if (category) {
-      ({ rows } = await pool.query(
-        `SELECT * FROM recipes WHERE category = $1 ORDER BY recipe_name`,
-        [category]
-      ));
+      ({ rows } = await pool.query(`SELECT * FROM recipes WHERE category = $1 ORDER BY recipe_name`, [category]));
     } else if (concept) {
-      ({ rows } = await pool.query(
-        `SELECT * FROM recipes WHERE concept = $1 ORDER BY updated_at DESC`,
-        [concept]
-      ));
+      ({ rows } = await pool.query(`SELECT * FROM recipes WHERE concept = $1 ORDER BY updated_at DESC`, [concept]));
     } else {
       ({ rows } = await pool.query(`SELECT * FROM recipes ORDER BY updated_at DESC`));
     }
     res.json(rows.map(rowToRecipe));
   } catch (e: any) {
-    console.error("GET /api/recipes error:", e.message);
     res.status(500).json({ error: "Failed to fetch recipes", detail: e.message });
   }
 });
 
-// GET single recipe
-app.get("/api/recipes/:id", async (req, res) => {
+app.get("/api/recipes/:id", requireAuth, async (req, res) => {
   const id = parseInt(req.params.id as string);
   if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
   try {
@@ -155,13 +260,11 @@ app.get("/api/recipes/:id", async (req, res) => {
     if (!rows[0]) return res.status(404).json({ error: "Recipe not found" });
     res.json(rowToRecipe(rows[0]));
   } catch (e: any) {
-    console.error("GET /api/recipes/:id error:", e.message);
     res.status(500).json({ error: "Failed to fetch recipe", detail: e.message });
   }
 });
 
-// POST create recipe
-app.post("/api/recipes", async (req, res) => {
+app.post("/api/recipes", requireAuth, async (req, res) => {
   try {
     const data = insertRecipeSchema.parse(req.body);
     const now = Date.now();
@@ -198,19 +301,16 @@ app.post("/api/recipes", async (req, res) => {
     res.status(201).json(rowToRecipe(rows[0]));
   } catch (e: any) {
     if (e instanceof z.ZodError) return res.status(400).json({ error: "Validation failed", details: e.errors });
-    console.error("POST /api/recipes error:", e.message);
     res.status(500).json({ error: "Failed to create recipe", detail: e.message });
   }
 });
 
-// PATCH update recipe
-app.patch("/api/recipes/:id", async (req, res) => {
+app.patch("/api/recipes/:id", requireAuth, async (req, res) => {
   const id = parseInt(req.params.id as string);
   if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
   try {
     const data = insertRecipeSchema.partial().parse(req.body);
     const now = Date.now();
-
     const fieldMap: Record<string, string> = {
       recipeName: "recipe_name", nameZh: "name_zh", concept: "concept",
       category: "category", subcategory: "subcategory", station: "station",
@@ -228,7 +328,6 @@ app.patch("/api/recipes/:id", async (req, res) => {
       photoUrl: "photo_url", chefNotes: "chef_notes",
       commonMistakes: "common_mistakes", criticalPoints: "critical_points",
     };
-
     const setClauses: string[] = [];
     const values: any[] = [];
     let idx = 1;
@@ -241,7 +340,6 @@ app.patch("/api/recipes/:id", async (req, res) => {
     setClauses.push(`updated_at = $${idx++}`);
     values.push(now);
     values.push(id);
-
     const { rows } = await pool.query(
       `UPDATE recipes SET ${setClauses.join(", ")} WHERE id = $${idx} RETURNING *`,
       values
@@ -250,13 +348,11 @@ app.patch("/api/recipes/:id", async (req, res) => {
     res.json(rowToRecipe(rows[0]));
   } catch (e: any) {
     if (e instanceof z.ZodError) return res.status(400).json({ error: "Validation failed", details: e.errors });
-    console.error("PATCH /api/recipes/:id error:", e.message);
     res.status(500).json({ error: "Failed to update recipe", detail: e.message });
   }
 });
 
-// POST upload photo
-app.post("/api/recipes/:id/photo", upload.single("photo"), async (req, res) => {
+app.post("/api/recipes/:id/photo", requireAuth, upload.single("photo"), async (req, res) => {
   const id = parseInt(req.params.id as string);
   if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
   if (!req.file) return res.status(400).json({ error: "No file uploaded" });
@@ -277,8 +373,7 @@ app.post("/api/recipes/:id/photo", upload.single("photo"), async (req, res) => {
   }
 });
 
-// DELETE photo
-app.delete("/api/recipes/:id/photo", async (req, res) => {
+app.delete("/api/recipes/:id/photo", requireAuth, async (req, res) => {
   const id = parseInt(req.params.id as string);
   if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
   try {
@@ -295,8 +390,7 @@ app.delete("/api/recipes/:id/photo", async (req, res) => {
   }
 });
 
-// DELETE recipe
-app.delete("/api/recipes/:id", async (req, res) => {
+app.delete("/api/recipes/:id", requireAuth, async (req, res) => {
   const id = parseInt(req.params.id as string);
   if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
   try {

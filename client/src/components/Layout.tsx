@@ -1,14 +1,17 @@
 import { useHashLocation } from "wouter/use-hash-location";
 import { Link } from "wouter";
-import { BookOpen, PlusCircle } from "lucide-react";
-
-const NAV = [
-  { href: "/", label: "Recipe Library", icon: BookOpen },
-  { href: "/new", label: "New Recipe", icon: PlusCircle },
-];
+import { BookOpen, PlusCircle, Users, LogOut } from "lucide-react";
+import { useAuth } from "@/lib/auth";
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   const [location] = useHashLocation();
+  const { user, logout } = useAuth();
+
+  const NAV = [
+    { href: "/", label: "Recipe Library", icon: BookOpen },
+    { href: "/new", label: "New Recipe", icon: PlusCircle },
+    ...(user?.role === "admin" ? [{ href: "/users", label: "Team", icon: Users }] : []),
+  ];
 
   return (
     <div style={{ display: "flex", minHeight: "100dvh", background: "#f0ebe1" }}>
@@ -64,9 +67,25 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           })}
         </nav>
 
-        {/* Footer */}
-        <div style={{ padding: "14px 18px", borderTop: "1px solid #d4ccbc" }}>
-          <span style={{ fontSize: 10, color: "#b0a898", letterSpacing: "0.04em" }}>© 2026 LPY Kitchen</span>
+        {/* Footer — user info + logout */}
+        <div style={{ padding: "12px 14px", borderTop: "1px solid #d4ccbc" }}>
+          <div style={{ fontSize: 11, color: "#6b5f4f", fontFamily: "DM Sans, sans-serif", marginBottom: 8 }}>
+            <span style={{ color: "#b8892a", fontWeight: 600 }}>{user?.username}</span>
+            <span style={{ color: "#b0a898", marginLeft: 4 }}>· {user?.role}</span>
+          </div>
+          <button
+            data-testid="button-logout"
+            onClick={logout}
+            style={{
+              display: "flex", alignItems: "center", gap: 6,
+              padding: "6px 8px", borderRadius: 3, width: "100%",
+              background: "none", border: "none", cursor: "pointer",
+              fontSize: 12, color: "#888070", fontFamily: "DM Sans, sans-serif",
+            }}
+          >
+            <LogOut size={13} />
+            Sign out
+          </button>
         </div>
       </aside>
 
