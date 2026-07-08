@@ -22,67 +22,75 @@ const upload = multer({
 
 export function registerRoutes(httpServer: ReturnType<typeof createServer>, app: Express) {
   // GET all recipes
-  app.get("/api/recipes", (req, res) => {
+  app.get("/api/recipes", async (req, res) => {
     try {
       const { search, category, concept } = req.query as Record<string, string>;
       let recipes;
       if (search) {
-        recipes = storage.searchRecipes(search);
+        recipes = await storage.searchRecipes(search);
       } else if (category) {
-        recipes = storage.getRecipesByCategory(category);
+        recipes = await storage.getRecipesByCategory(category);
       } else if (concept) {
-        recipes = storage.getRecipesByConcept(concept);
+        recipes = await storage.getRecipesByConcept(concept);
       } else {
-        recipes = storage.getAllRecipes();
+        recipes = await storage.getAllRecipes();
       }
       res.json(recipes);
     } catch (e) {
+      console.error("GET /api/recipes error:", e);
       res.status(500).json({ error: "Failed to fetch recipes" });
     }
   });
 
   // GET single recipe
-  app.get("/api/recipes/:id", (req, res) => {
+  app.get("/api/recipes/:id", async (req, res) => {
     const id = parseInt(req.params.id);
     if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
-    const recipe = storage.getRecipe(id);
-    if (!recipe) return res.status(404).json({ error: "Recipe not found" });
-    res.json(recipe);
+    try {
+      const recipe = await storage.getRecipe(id);
+      if (!recipe) return res.status(404).json({ error: "Recipe not found" });
+      res.json(recipe);
+    } catch (e) {
+      console.error("GET /api/recipes/:id error:", e);
+      res.status(500).json({ error: "Failed to fetch recipe" });
+    }
   });
 
   // POST create recipe
-  app.post("/api/recipes", (req, res) => {
+  app.post("/api/recipes", async (req, res) => {
     try {
       const body = insertRecipeSchema.parse(req.body);
-      const recipe = storage.createRecipe(body);
+      const recipe = await storage.createRecipe(body);
       res.status(201).json(recipe);
     } catch (e) {
       if (e instanceof z.ZodError) {
         return res.status(400).json({ error: "Validation failed", details: e.errors });
       }
+      console.error("POST /api/recipes error:", e);
       res.status(500).json({ error: "Failed to create recipe" });
     }
   });
 
   // PATCH update recipe
-  app.patch("/api/recipes/:id", (req, res) => {
+  app.patch("/api/recipes/:id", async (req, res) => {
     const id = parseInt(req.params.id);
     if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
     try {
       const body = insertRecipeSchema.partial().parse(req.body);
-      const recipe = storage.updateRecipe(id, body);
+      const recipe = await storage.updateRecipe(id, body);
       if (!recipe) return res.status(404).json({ error: "Recipe not found" });
       res.json(recipe);
     } catch (e) {
       if (e instanceof z.ZodError) {
         return res.status(400).json({ error: "Validation failed", details: e.errors });
       }
+      console.error("PATCH /api/recipes/:id error:", e);
       res.status(500).json({ error: "Failed to update recipe" });
     }
   });
 
   // POST upload photo for a recipe
-  app.post("/api/recipes/:id/photo", upload.single("photo"), (req, res) => {
+  app.post("/api/recipes/:id/photo", upload.single("photo"), async (req, res) => {
     const id = parseInt(req.params.id);
     if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
     if (!req.file) return res.status(400).json({ error: "No file uploaded" });
@@ -94,33 +102,48 @@ export function registerRoutes(httpServer: ReturnType<typeof createServer>, app:
     fs.renameSync(req.file.path, newPath);
 
     const photoUrl = `/uploads/${newName}`;
-    const recipe = storage.updateRecipe(id, { photoUrl });
-    if (!recipe) return res.status(404).json({ error: "Recipe not found" });
-    res.json({ photoUrl });
+    try {
+      const recipe = await storage.updateRecipe(id, { photoUrl });
+      if (!recipe) return res.status(404).json({ error: "Recipe not found" });
+      res.json({ photoUrl });
+    } catch (e) {
+      console.error("POST /api/recipes/:id/photo error:", e);
+      res.status(500).json({ error: "Failed to update photo" });
+    }
   });
 
   // DELETE photo from a recipe
-  app.delete("/api/recipes/:id/photo", (req, res) => {
+  app.delete("/api/recipes/:id/photo", async (req, res) => {
     const id = parseInt(req.params.id);
     if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
-    const recipe = storage.getRecipe(id);
-    if (!recipe) return res.status(404).json({ error: "Recipe not found" });
-    // Delete file if it exists
-    if (recipe.photoUrl) {
-      const filePath = path.join(process.cwd(), recipe.photoUrl);
-      if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    try {
+      const recipe = await storage.getRecipe(id);
+      if (!recipe) return res.status(404).json({ error: "Recipe not found" });
+      // Delete file if it exists
+      if (recipe.photoUrl) {
+        const filePath = path.join(process.cwd(), recipe.photoUrl);
+        if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+      }
+      await storage.updateRecipe(id, { photoUrl: null });
+      res.json({ success: true });
+    } catch (e) {
+      console.error("DELETE /api/recipes/:id/photo error:", e);
+      res.status(500).json({ error: "Failed to delete photo" });
     }
-    storage.updateRecipe(id, { photoUrl: null });
-    res.json({ success: true });
   });
 
   // DELETE recipe
-  app.delete("/api/recipes/:id", (req, res) => {
+  app.delete("/api/recipes/:id", async (req, res) => {
     const id = parseInt(req.params.id);
     if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
-    const deleted = storage.deleteRecipe(id);
-    if (!deleted) return res.status(404).json({ error: "Recipe not found" });
-    res.json({ success: true });
+    try {
+      const deleted = await storage.deleteRecipe(id);
+      if (!deleted) return res.status(404).json({ error: "Recipe not found" });
+      res.json({ success: true });
+    } catch (e) {
+      console.error("DELETE /api/recipes/:id error:", e);
+      res.status(500).json({ error: "Failed to delete recipe" });
+    }
   });
 
   return httpServer;
