@@ -44,7 +44,7 @@ export function registerRoutes(httpServer: ReturnType<typeof createServer>, app:
 
   // GET single recipe
   app.get("/api/recipes/:id", async (req, res) => {
-    const id = parseInt(req.params.id);
+    const id = parseInt(req.params.id as string);
     if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
     try {
       const recipe = await storage.getRecipe(id);
@@ -73,7 +73,7 @@ export function registerRoutes(httpServer: ReturnType<typeof createServer>, app:
 
   // PATCH update recipe
   app.patch("/api/recipes/:id", async (req, res) => {
-    const id = parseInt(req.params.id);
+    const id = parseInt(req.params.id as string);
     if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
     try {
       const body = insertRecipeSchema.partial().parse(req.body);
@@ -91,12 +91,12 @@ export function registerRoutes(httpServer: ReturnType<typeof createServer>, app:
 
   // POST upload photo for a recipe
   app.post("/api/recipes/:id/photo", upload.single("photo"), async (req, res) => {
-    const id = parseInt(req.params.id);
+    const id = parseInt(req.params.id as string);
     if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
     if (!req.file) return res.status(400).json({ error: "No file uploaded" });
 
     // Rename to a stable filename with extension
-    const ext = req.file.mimetype.split("/")[1].replace("jpeg", "jpg");
+    const ext = (req.file.mimetype.split("/")[1] ?? "jpg").replace("jpeg", "jpg");
     const newName = `recipe_${id}_${Date.now()}.${ext}`;
     const newPath = path.join(UPLOAD_DIR, newName);
     fs.renameSync(req.file.path, newPath);
@@ -114,7 +114,7 @@ export function registerRoutes(httpServer: ReturnType<typeof createServer>, app:
 
   // DELETE photo from a recipe
   app.delete("/api/recipes/:id/photo", async (req, res) => {
-    const id = parseInt(req.params.id);
+    const id = parseInt(req.params.id as string);
     if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
     try {
       const recipe = await storage.getRecipe(id);
@@ -134,7 +134,7 @@ export function registerRoutes(httpServer: ReturnType<typeof createServer>, app:
 
   // DELETE recipe
   app.delete("/api/recipes/:id", async (req, res) => {
-    const id = parseInt(req.params.id);
+    const id = parseInt(req.params.id as string);
     if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
     try {
       const deleted = await storage.deleteRecipe(id);

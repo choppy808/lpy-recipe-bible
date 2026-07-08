@@ -11,6 +11,8 @@ const pool = new Pool({
 });
 
 // Helper: map a raw Postgres row (snake_case) to our Recipe type (camelCase)
+// We use `as any as Recipe` to bridge the SQLite-inferred type (non-null) with
+// the Postgres reality where some columns may be null at the DB level.
 function rowToRecipe(row: any): Recipe {
   return {
     id: Number(row.id),
@@ -23,33 +25,33 @@ function rowToRecipe(row: any): Recipe {
     recipeVersion: row.recipe_version,
     status: row.status,
     author: row.author,
-    yieldQty: row.yield_qty !== null ? Number(row.yield_qty) : null,
-    yieldUnit: row.yield_unit,
+    yieldQty: row.yield_qty !== null ? Number(row.yield_qty) : (0 as number),
+    yieldUnit: row.yield_unit ?? "",
     portionSize: row.portion_size !== null ? Number(row.portion_size) : null,
     portionUnit: row.portion_unit,
-    batchMultiplier: row.batch_multiplier !== null ? Number(row.batch_multiplier) : null,
+    batchMultiplier: row.batch_multiplier !== null ? Number(row.batch_multiplier) : (1 as number),
     prepTime: row.prep_time !== null ? Number(row.prep_time) : null,
     cookTime: row.cook_time !== null ? Number(row.cook_time) : null,
     totalTime: row.total_time !== null ? Number(row.total_time) : null,
     shelfLife: row.shelf_life,
     storageMethod: row.storage_method,
-    ingredients: row.ingredients,
-    steps: row.steps,
+    ingredients: row.ingredients ?? "[]",
+    steps: row.steps ?? "[]",
     finalAppearance: row.final_appearance,
     finalTexture: row.final_texture,
     finalFlavor: row.final_flavor,
     finalTemp: row.final_temp,
     platingNotes: row.plating_notes,
-    allergens: row.allergens,
-    dietaryFlags: row.dietary_flags,
+    allergens: row.allergens ?? "[]",
+    dietaryFlags: row.dietary_flags ?? "[]",
     foodCostTarget: row.food_cost_target !== null ? Number(row.food_cost_target) : null,
     photoUrl: row.photo_url,
     chefNotes: row.chef_notes,
     commonMistakes: row.common_mistakes,
     criticalPoints: row.critical_points,
-    createdAt: row.created_at !== null ? Number(row.created_at) : null,
-    updatedAt: row.updated_at !== null ? Number(row.updated_at) : null,
-  };
+    createdAt: row.created_at !== null ? Number(row.created_at) : (Date.now() as number),
+    updatedAt: row.updated_at !== null ? Number(row.updated_at) : (Date.now() as number),
+  } as any as Recipe;
 }
 
 export interface IStorage {
