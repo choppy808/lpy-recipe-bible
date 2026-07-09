@@ -24,19 +24,10 @@ export default function RecipeViewPage() {
     recipeNameMap.set(r.recipe_name.toLowerCase().trim(), r.id);
   });
 
-  // Find a linked recipe id for an ingredient name (fuzzy: check if any recipe name
-  // is contained within the ingredient name or vice versa)
+  // Find a linked recipe id — exact name match only
   function findLinkedRecipe(ingName: string): number | null {
     const normalized = ingName.toLowerCase().trim();
-    // Exact match first
-    if (recipeNameMap.has(normalized)) return recipeNameMap.get(normalized)!;
-    // Partial match: ingredient name contains a recipe name
-    for (const [name, id] of recipeNameMap.entries()) {
-      if (name.length > 4 && (normalized.includes(name) || name.includes(normalized))) {
-        return id;
-      }
-    }
-    return null;
+    return recipeNameMap.get(normalized) ?? null;
   }
 
   const { data: recipe, isLoading } = useQuery<Recipe>({
