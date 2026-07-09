@@ -10,7 +10,7 @@ import { nanoid } from "nanoid";
 const CATEGORIES = [
   "Prep", "Sauce", "Component", "Dough/Noodle", "Filling",
   "Braise/Stew", "Cold Dish", "Line Dish", "Stock/Broth",
-  "Pickle/Ferment", "Dessert", "Family Meal", "Specials", "Other"
+  "Pickle/Ferment", "Dessert", "Family Meal", "Catering", "Specials", "Other"
 ];
 const STATIONS = ["Prep", "Dumpling", "Noodle", "Salad / Bing", "All Stations"];
 const UNITS = ["g", "kg", "ml", "L", "oz", "lb", "each", "bunch", "tbsp", "tsp", "cup", "clove", "sheet", "piece", "qt", "portions"];
