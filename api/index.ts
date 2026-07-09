@@ -229,6 +229,16 @@ app.delete("/api/users/:id", requireAdmin, async (req, res) => {
 
 // ── RECIPE ROUTES (all protected) ────────────────────────────────────────────
 
+// GET lightweight name index — used for ingredient linking
+app.get("/api/recipes/names", requireAuth, async (_req, res) => {
+  try {
+    const { rows } = await pool.query(`SELECT id, recipe_name FROM recipes ORDER BY recipe_name`);
+    res.json(rows);
+  } catch (e: any) {
+    res.status(500).json({ error: "Failed to fetch recipe names" });
+  }
+});
+
 app.get("/api/recipes", requireAuth, async (req, res) => {
   try {
     const { search, category, concept } = req.query as Record<string, string>;

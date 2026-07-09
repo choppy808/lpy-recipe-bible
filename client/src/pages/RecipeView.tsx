@@ -2,7 +2,7 @@ import { useParams, Link, useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { Recipe, Ingredient, Step } from "@shared/schema";
-import { ArrowLeft, Pencil, Printer, Trash2, AlertTriangle } from "lucide-react";
+import { ArrowLeft, Pencil, Printer, Trash2, AlertTriangle, ExternalLink } from "lucide-react";
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -11,6 +11,33 @@ export default function RecipeViewPage() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const [batchScale, setBatchScale] = useState(1);
+
+  // Fetch all recipe names for ingredient linking
+  const { data: recipeNames } = useQuery<{ id: number; recipe_name: string }[]>({
+    queryKey: ["/api/recipes/names"],
+    staleTime: 60000,
+  });
+
+  // Build a lookup map: normalized name -> recipe id
+  const recipeNameMap = new Map<string, number>();
+  (recipeNames ?? []).forEach(r => {
+    recipeNameMap.set(r.recipe_name.toLowerCase().trim(), r.id);
+  });
+
+  // Find a linked recipe id for an ingredient name (fuzzy: check if any recipe name
+  // is contained within the ingredient name or vice versa)
+  function findLinkedRecipe(ingName: string): number | null {
+    const normalized = ingName.toLowerCase().trim();
+    // Exact match first
+    if (recipeNameMap.has(normalized)) return recipeNameMap.get(normalized)!;
+    // Partial match: ingredient name contains a recipe name
+    for (const [name, id] of recipeNameMap.entries()) {
+      if (name.length > 4 && (normalized.includes(name) || name.includes(normalized))) {
+        return id;
+      }
+    }
+    return null;
+  }
 
   const { data: recipe, isLoading } = useQuery<Recipe>({
     queryKey: ["/api/recipes", params.id],
@@ -183,7 +210,33 @@ export default function RecipeViewPage() {
                     <td>{ing.quantity ? scaledQty(ing.quantity) : ""}</td>
                     <td>{ing.unit}</td>
                     <td>
-                      {ing.name}
+                      {(() => {
+                        const linkedId = findLinkedRecipe(ing.name);
+                        // Don't link to the recipe currently being viewed
+                        if (linkedId && linkedId !== Number(params.id)) {
+                          return (
+                            <Link href={`/recipe/${linkedId}`}>
+                              <a
+                                data-testid={`link-ingredient-recipe-${ing.id}`}
+                                style={{
+                                  color: "#014643",
+                                  textDecoration: "none",
+                                  borderBottom: "1px solid #b8892a",
+                                  paddingBottom: 1,
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: 3,
+                                }}
+                                title={`Go to recipe: ${ing.name}`}
+                              >
+                                {ing.name}
+                                <ExternalLink size={10} style={{ color: "#b8892a", flexShrink: 0 }} />
+                              </a>
+                            </Link>
+                          );
+                        }
+                        return <>{ing.name}</>;
+                      })()}
                       {ing.nameZh && <span style={{ color: "#aaa", marginLeft: 5, fontSize: 11 }}>{ing.nameZh}</span>}
                       {ing.isOptional && <span style={{ color: "#aaa", marginLeft: 5, fontStyle: "italic", fontSize: 11 }}>opt.</span>}
                     </td>
