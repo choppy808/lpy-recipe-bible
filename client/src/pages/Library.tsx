@@ -9,7 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 const CATEGORIES = [
   "All", "Prep", "Sauce", "Component", "Dough/Noodle", "Filling",
   "Braise/Stew", "Cold Dish", "Line Dish", "Stock/Broth",
-  "Pickle/Ferment", "Dessert", "Family Meal", "Catering", "Specials", "Other"
+  "Pickle/Ferment", "Dessert", "Family Meal", "Catering", "Festival", "Specials", "Other"
 ];
 const STATUSES = ["All", "draft", "active", "archived"];
 

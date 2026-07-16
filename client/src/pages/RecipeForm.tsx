@@ -10,7 +10,7 @@ import { nanoid } from "nanoid";
 const CATEGORIES = [
   "Prep", "Sauce", "Component", "Dough/Noodle", "Filling",
   "Braise/Stew", "Cold Dish", "Line Dish", "Stock/Broth",
-  "Pickle/Ferment", "Dessert", "Family Meal", "Catering", "Specials", "Other"
+  "Pickle/Ferment", "Dessert", "Family Meal", "Catering", "Festival", "Specials", "Other"
 ];
 const STATIONS = ["Prep", "Dumpling", "Noodle", "Salad / Bing", "All Stations"];
 const UNITS = ["g", "kg", "ml", "L", "oz", "lb", "each", "bunch", "tbsp", "tsp", "cup", "clove", "sheet", "piece", "qt", "portions"];
@@ -69,7 +69,7 @@ export default function RecipeFormPage() {
     yieldQty: "" as string | number,
     yieldUnit: "portions",
     portionSize: "",
-    portionUnit: "g",
+    portionUnit: "",
     batchMultiplier: 1,
     prepTime: "",
     cookTime: "",
@@ -112,7 +112,7 @@ export default function RecipeFormPage() {
         yieldQty: existing.yieldQty,
         yieldUnit: existing.yieldUnit,
         portionSize: existing.portionSize?.toString() ?? "",
-        portionUnit: existing.portionUnit ?? "g",
+        portionUnit: existing.portionUnit ?? "",
         batchMultiplier: existing.batchMultiplier,
         prepTime: existing.prepTime?.toString() ?? "",
         cookTime: existing.cookTime?.toString() ?? "",
