@@ -7,6 +7,30 @@ import { ArrowLeft, Plus, Trash2, AlertTriangle, Save, Camera, X } from "lucide-
 import { useToast } from "@/hooks/use-toast";
 import { nanoid } from "nanoid";
 
+// Parse a time input — accepts plain minutes ("90") or h:mm / Xh / XhYm / XhY format
+function parseTimeInput(val: string): number {
+  if (!val) return 0;
+  const s = val.trim().toLowerCase();
+  // Formats: 1h30, 1h 30m, 1h30m, 1:30
+  const hm = s.match(/^(\d+)\s*h\s*(\d*)\s*m?$/);
+  if (hm) return parseInt(hm[1]) * 60 + (parseInt(hm[2]) || 0);
+  // Format: 1:30
+  const colon = s.match(/^(\d+):(\d{1,2})$/);
+  if (colon) return parseInt(colon[1]) * 60 + parseInt(colon[2]);
+  // Plain number = minutes
+  const plain = parseFloat(s);
+  return isNaN(plain) ? 0 : Math.round(plain);
+}
+
+// Format stored minutes into human-readable string
+export function formatMinutes(mins: number | null | undefined): string {
+  if (!mins) return "—";
+  if (mins < 60) return `${mins} min`;
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return m > 0 ? `${h} hr ${m} min` : `${h} hr`;
+}
+
 const CATEGORIES = [
   "Prep", "Sauce", "Component", "Dough/Noodle", "Filling",
   "Braise/Stew", "Cold Dish", "Line Dish", "Stock/Broth",
@@ -169,7 +193,7 @@ export default function RecipeFormPage() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const totalTime = form.totalTime || (
-      (parseInt(form.prepTime as string) || 0) + (parseInt(form.cookTime as string) || 0)
+      parseTimeInput(form.prepTime as string) + parseTimeInput(form.cookTime as string)
     ).toString();
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { date: _date, ...formData } = form;
@@ -179,9 +203,9 @@ export default function RecipeFormPage() {
       yieldQty: Number(form.yieldQty) || 0,
       portionSize: form.portionSize ? Number(form.portionSize) : null,
       batchMultiplier: Number(form.batchMultiplier),
-      prepTime: form.prepTime ? Number(form.prepTime) : null,
-      cookTime: form.cookTime ? Number(form.cookTime) : null,
-      totalTime: totalTime ? Number(totalTime) : null,
+      prepTime: form.prepTime ? parseTimeInput(form.prepTime as string) || null : null,
+      cookTime: form.cookTime ? parseTimeInput(form.cookTime as string) || null : null,
+      totalTime: totalTime ? parseTimeInput(String(totalTime)) || null : null,
       foodCostTarget: form.foodCostTarget ? Number(form.foodCostTarget) : null,
       allergens: JSON.stringify(form.allergens),
       dietaryFlags: JSON.stringify(form.dietaryFlags),
@@ -263,7 +287,7 @@ export default function RecipeFormPage() {
             <span className="meta-cell-label">Active / Total</span>
             <span className="meta-cell-value">
               {form.prepTime || form.totalTime
-                ? `${form.prepTime || "?"}min / ${form.totalTime || "?"}min`
+                ? `${formatMinutes(parseTimeInput(form.prepTime as string) || undefined)} / ${formatMinutes(parseTimeInput(form.totalTime as string) || undefined)}`
                 : "—"}
             </span>
           </div>
@@ -490,17 +514,19 @@ export default function RecipeFormPage() {
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 24 }}>
             <div>
               <FieldLabel>Active Time</FieldLabel>
-              <input className="form-input" type="number" min="0" value={form.prepTime}
+              <input className="form-input" type="text" value={form.prepTime}
                 onChange={e => {
                   updateField("prepTime", e.target.value);
-                  const t = (parseInt(e.target.value) || 0) + (parseInt(form.cookTime) || 0);
-                  updateField("totalTime", t || "");
-                }} placeholder="30 min" data-testid="input-prep-time" />
+                  const mins = parseTimeInput(e.target.value);
+                  const cookMins = parseTimeInput(form.cookTime as string);
+                  const t = mins + cookMins;
+                  updateField("totalTime", t > 0 ? String(t) : "");
+                }} placeholder="30 or 1h30" data-testid="input-prep-time" />
             </div>
             <div>
               <FieldLabel>Total Time</FieldLabel>
-              <input className="form-input" value={form.totalTime}
-                onChange={e => updateField("totalTime", e.target.value)} placeholder="2 hr" data-testid="input-total-time" />
+              <input className="form-input" type="text" value={form.totalTime}
+                onChange={e => updateField("totalTime", e.target.value)} placeholder="60 or 2h30" data-testid="input-total-time" />
             </div>
             <div>
               <FieldLabel>Shelf Life / Hold</FieldLabel>

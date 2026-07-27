@@ -3,6 +3,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { Recipe, Ingredient, Step } from "@shared/schema";
 import { ArrowLeft, Pencil, Printer, Trash2, AlertTriangle, ExternalLink } from "lucide-react";
+import { formatMinutes } from "./RecipeForm";
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -165,7 +166,7 @@ export default function RecipeViewPage() {
             </div>
             <div className="meta-cell">
               <span className="meta-cell-label">Active / Total</span>
-              <span className="meta-cell-value">{recipe.prepTime || recipe.totalTime ? `${recipe.prepTime ?? "?"}min / ${recipe.totalTime ?? "?"}min` : "—"}</span>
+              <span className="meta-cell-value">{recipe.prepTime || recipe.totalTime ? `${formatMinutes(recipe.prepTime)} / ${formatMinutes(recipe.totalTime)}` : "—"}</span>
             </div>
             <div className="meta-cell">
               <span className="meta-cell-label">Shelf Life</span>
