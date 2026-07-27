@@ -3,7 +3,22 @@ import { useLocation, useParams, Link } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { Recipe, Ingredient, Step } from "@shared/schema";
-import { ArrowLeft, Plus, Trash2, AlertTriangle, Save, Camera, X } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, AlertTriangle, Save, Camera, X, GripVertical } from "lucide-react";
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  verticalListSortingStrategy,
+  useSortable,
+  arrayMove,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { useToast } from "@/hooks/use-toast";
 import { nanoid } from "nanoid";
 
@@ -65,11 +80,88 @@ function SectionHeader({ children }: { children: React.ReactNode }) {
   );
 }
 
+// ── Sortable ingredient row ──────────────────────────────────────────────────
+function SortableIngredientRow({
+  ing, idx, units, onUpdate, onRemove
+}: {
+  ing: Ingredient;
+  idx: number;
+  units: string[];
+  onUpdate: (id: string, field: keyof Ingredient, value: any) => void;
+  onRemove: (id: string) => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+    useSortable({ id: ing.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={{
+        ...style,
+        display: "grid",
+        gridTemplateColumns: "18px 56px 90px 1fr 100px 20px",
+        gap: 6,
+        marginBottom: 6,
+        alignItems: "center",
+      }}
+      data-testid={`ingredient-row-${idx}`}
+    >
+      {/* Drag handle */}
+      <span
+        {...attributes}
+        {...listeners}
+        style={{ cursor: "grab", color: "#c8c0b0", display: "flex", alignItems: "center", touchAction: "none" }}
+        data-testid={`drag-ing-${idx}`}
+      >
+        <GripVertical size={13} />
+      </span>
+      <input
+        className="form-input" type="number" min="0" step="any"
+        style={{ padding: "6px 8px" }}
+        value={ing.quantity || ""}
+        onChange={e => onUpdate(ing.id, "quantity", parseFloat(e.target.value))}
+        data-testid={`input-ing-qty-${idx}`}
+      />
+      <select className="form-select" style={{ padding: "6px 24px 6px 8px" }} value={ing.unit} onChange={e => onUpdate(ing.id, "unit", e.target.value)}>
+        {units.map(u => <option key={u} value={u}>{u}</option>)}
+      </select>
+      <input
+        className="form-input"
+        style={{ padding: "6px 8px" }}
+        value={ing.name}
+        onChange={e => onUpdate(ing.id, "name", e.target.value)}
+        placeholder="Ingredient"
+        data-testid={`input-ing-name-${idx}`}
+      />
+      <input
+        className="form-input"
+        style={{ padding: "6px 8px" }}
+        value={ing.prepNote ?? ""}
+        onChange={e => onUpdate(ing.id, "prepNote", e.target.value)}
+        placeholder="Prep note"
+        data-testid={`input-ing-prep-${idx}`}
+      />
+      <button type="button" onClick={() => onRemove(ing.id)}
+        style={{ background: "none", border: "none", cursor: "pointer", color: "#c8c0b0", padding: 2, display: "flex", alignItems: "center" }}
+        data-testid={`button-remove-ing-${idx}`}>
+        <X size={13} />
+      </button>
+    </div>
+  );
+}
+
 export default function RecipeFormPage() {
   const params = useParams<{ id?: string }>();
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const isEditing = !!params.id;
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
   const { data: existing, isLoading: loadingExisting } = useQuery<Recipe>({
     queryKey: ["/api/recipes", params.id],
@@ -569,48 +661,40 @@ export default function RecipeFormPage() {
           {/* ── INGREDIENTS ── */}
           <SectionHeader>Ingredients</SectionHeader>
           {/* Column headers */}
-          <div style={{ display: "grid", gridTemplateColumns: "56px 90px 1fr 100px 20px", gap: 6, marginBottom: 6 }}>
-            {["Qty", "Unit", "Ingredient", "Prep note", ""].map((h, i) => (
+          <div style={{ display: "grid", gridTemplateColumns: "18px 56px 90px 1fr 100px 20px", gap: 6, marginBottom: 6 }}>
+            {["", "Qty", "Unit", "Ingredient", "Prep note", ""].map((h, i) => (
               <span key={i} style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "#b0a898" }}>{h}</span>
             ))}
           </div>
-          <div style={{ marginBottom: 12 }} data-testid="ingredients-list">
-            {ingredients.map((ing, idx) => (
-              <div key={ing.id} style={{ display: "grid", gridTemplateColumns: "56px 90px 1fr 100px 20px", gap: 6, marginBottom: 6, alignItems: "center" }} data-testid={`ingredient-row-${idx}`}>
-                <input
-                  className="form-input" type="number" min="0" step="any"
-                  style={{ padding: "6px 8px" }}
-                  value={ing.quantity || ""}
-                  onChange={e => updateIngredient(ing.id, "quantity", parseFloat(e.target.value))}
-                  data-testid={`input-ing-qty-${idx}`}
-                />
-                <select className="form-select" style={{ padding: "6px 24px 6px 8px" }} value={ing.unit} onChange={e => updateIngredient(ing.id, "unit", e.target.value)}>
-                  {UNITS.map(u => <option key={u} value={u}>{u}</option>)}
-                </select>
-                <input
-                  className="form-input"
-                  style={{ padding: "6px 8px" }}
-                  value={ing.name}
-                  onChange={e => updateIngredient(ing.id, "name", e.target.value)}
-                  placeholder="Ingredient"
-                  data-testid={`input-ing-name-${idx}`}
-                />
-                <input
-                  className="form-input"
-                  style={{ padding: "6px 8px" }}
-                  value={ing.prepNote ?? ""}
-                  onChange={e => updateIngredient(ing.id, "prepNote", e.target.value)}
-                  placeholder="Prep note"
-                  data-testid={`input-ing-prep-${idx}`}
-                />
-                <button type="button" onClick={() => removeIngredient(ing.id)}
-                  style={{ background: "none", border: "none", cursor: "pointer", color: "#c8c0b0", padding: 2, display: "flex", alignItems: "center" }}
-                  data-testid={`button-remove-ing-${idx}`}>
-                  <X size={13} />
-                </button>
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={(event: DragEndEvent) => {
+              const { active, over } = event;
+              if (over && active.id !== over.id) {
+                setIngredients(prev => {
+                  const oldIdx = prev.findIndex(i => i.id === active.id);
+                  const newIdx = prev.findIndex(i => i.id === over.id);
+                  return arrayMove(prev, oldIdx, newIdx);
+                });
+              }
+            }}
+          >
+            <SortableContext items={ingredients.map(i => i.id)} strategy={verticalListSortingStrategy}>
+              <div style={{ marginBottom: 12 }} data-testid="ingredients-list">
+                {ingredients.map((ing, idx) => (
+                  <SortableIngredientRow
+                    key={ing.id}
+                    ing={ing}
+                    idx={idx}
+                    units={UNITS}
+                    onUpdate={updateIngredient}
+                    onRemove={removeIngredient}
+                  />
+                ))}
               </div>
-            ))}
-          </div>
+            </SortableContext>
+          </DndContext>
           <button type="button" onClick={addIngredient}
             style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#014643", background: "none", border: "1.5px dashed #b8c8c6", borderRadius: 3, padding: "6px 14px", cursor: "pointer", marginBottom: 24, letterSpacing: "0.04em" }}
             data-testid="button-add-ingredient">
