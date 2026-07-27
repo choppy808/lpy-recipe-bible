@@ -80,6 +80,114 @@ function SectionHeader({ children }: { children: React.ReactNode }) {
   );
 }
 
+// ── Sortable step card ───────────────────────────────────────────────────────
+function SortableStepCard({
+  step, idx, onUpdate, onRemove
+}: {
+  step: Step;
+  idx: number;
+  onUpdate: (id: string, field: keyof Step, value: any) => void;
+  onRemove: (id: string) => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+    useSortable({ id: step.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={{
+        ...style,
+        marginBottom: 14,
+        padding: "12px 14px",
+        background: "#f8f5ef",
+        border: "1px solid #d4ccbc",
+        borderRadius: 3,
+      }}
+      data-testid={`step-card-${idx}`}
+    >
+      <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+        {/* Drag handle */}
+        <span
+          {...attributes}
+          {...listeners}
+          style={{ cursor: "grab", color: "#c8c0b0", display: "flex", alignItems: "center", paddingTop: 2, touchAction: "none", flexShrink: 0 }}
+          data-testid={`drag-step-${idx}`}
+        >
+          <GripVertical size={13} />
+        </span>
+        {/* Step number bubble */}
+        <div style={{
+          width: 22, height: 22, borderRadius: "50%",
+          background: step.criticalPoint ? "#c0392b" : "#014643",
+          color: "#faf7f2", fontFamily: "'DM Mono', monospace",
+          fontSize: 11, fontWeight: 700,
+          display: "flex", alignItems: "center", justifyContent: "center",
+          flexShrink: 0, marginTop: 1,
+        }}>{idx + 1}</div>
+        <div style={{ flex: 1 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 90px 90px", gap: 8, marginBottom: 8 }}>
+            <div>
+              <FieldLabel>Action</FieldLabel>
+              <input className="form-input" style={{ padding: "5px 8px" }} value={step.action}
+                onChange={e => onUpdate(step.id, "action", e.target.value)}
+                placeholder="e.g. Season the protein" data-testid={`input-step-action-${idx}`} />
+            </div>
+            <div>
+              <FieldLabel>Duration</FieldLabel>
+              <input className="form-input" style={{ padding: "5px 8px" }} value={step.duration ?? ""}
+                onChange={e => onUpdate(step.id, "duration", e.target.value)}
+                placeholder="2–3 min" data-testid={`input-step-duration-${idx}`} />
+            </div>
+            <div>
+              <FieldLabel>Temp</FieldLabel>
+              <input className="form-input" style={{ padding: "5px 8px" }} value={step.temp ?? ""}
+                onChange={e => onUpdate(step.id, "temp", e.target.value)}
+                placeholder="165°F" data-testid={`input-step-temp-${idx}`} />
+            </div>
+          </div>
+          <div style={{ marginBottom: 8 }}>
+            <FieldLabel>Full Instruction</FieldLabel>
+            <textarea className="form-input" rows={3}
+              style={{ resize: "none", fontFamily: "'DM Sans', sans-serif" }}
+              value={step.instruction}
+              onChange={e => onUpdate(step.id, "instruction", e.target.value)}
+              placeholder="Detailed step. Include what to look for, quantities, common mistakes..."
+              data-testid={`input-step-instruction-${idx}`}
+            />
+          </div>
+          <div style={{ marginBottom: 8 }}>
+            <FieldLabel>Visual Cue</FieldLabel>
+            <input className="form-input" style={{ padding: "5px 8px" }} value={step.visualCue ?? ""}
+              onChange={e => onUpdate(step.id, "visualCue", e.target.value)}
+              placeholder="e.g. Oil shimmers; edges turn translucent"
+              data-testid={`input-step-visual-${idx}`} />
+          </div>
+          <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 12, color: step.criticalPoint ? "#c0392b" : "#888070" }}>
+            <input type="checkbox" checked={step.criticalPoint}
+              onChange={e => onUpdate(step.id, "criticalPoint", e.target.checked)}
+              data-testid={`switch-critical-${idx}`}
+              style={{ accentColor: "#c0392b" }}
+            />
+            <AlertTriangle size={12} style={{ color: "#c0392b" }} />
+            Critical Control Point (CCP)
+          </label>
+        </div>
+        <button type="button" onClick={() => onRemove(step.id)}
+          style={{ background: "none", border: "none", cursor: "pointer", color: "#c8c0b0", padding: 2, flexShrink: 0 }}
+          data-testid={`button-remove-step-${idx}`}>
+          <X size={13} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ── Sortable ingredient row ──────────────────────────────────────────────────
 function SortableIngredientRow({
   ing, idx, units, onUpdate, onRemove
@@ -703,75 +811,34 @@ export default function RecipeFormPage() {
 
           {/* ── METHOD ── */}
           <SectionHeader>Method</SectionHeader>
-          <div style={{ marginBottom: 12 }} data-testid="steps-list">
-            {steps.map((step, idx) => (
-              <div key={step.id} style={{ marginBottom: 14, padding: "12px 14px", background: "#f8f5ef", border: "1px solid #d4ccbc", borderRadius: 3 }} data-testid={`step-card-${idx}`}>
-                <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
-                  <div style={{
-                    width: 22, height: 22, borderRadius: "50%",
-                    background: step.criticalPoint ? "#c0392b" : "#014643",
-                    color: "#faf7f2", fontFamily: "'DM Mono', monospace",
-                    fontSize: 11, fontWeight: 700,
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    flexShrink: 0, marginTop: 1,
-                  }}>{idx + 1}</div>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 90px 90px", gap: 8, marginBottom: 8 }}>
-                      <div>
-                        <FieldLabel>Action</FieldLabel>
-                        <input className="form-input" style={{ padding: "5px 8px" }} value={step.action}
-                          onChange={e => updateStep(step.id, "action", e.target.value)}
-                          placeholder="e.g. Season the protein" data-testid={`input-step-action-${idx}`} />
-                      </div>
-                      <div>
-                        <FieldLabel>Duration</FieldLabel>
-                        <input className="form-input" style={{ padding: "5px 8px" }} value={step.duration ?? ""}
-                          onChange={e => updateStep(step.id, "duration", e.target.value)}
-                          placeholder="2–3 min" data-testid={`input-step-duration-${idx}`} />
-                      </div>
-                      <div>
-                        <FieldLabel>Temp</FieldLabel>
-                        <input className="form-input" style={{ padding: "5px 8px" }} value={step.temp ?? ""}
-                          onChange={e => updateStep(step.id, "temp", e.target.value)}
-                          placeholder="165°F" data-testid={`input-step-temp-${idx}`} />
-                      </div>
-                    </div>
-                    <div style={{ marginBottom: 8 }}>
-                      <FieldLabel>Full Instruction</FieldLabel>
-                      <textarea className="form-input" rows={3}
-                        style={{ resize: "none", fontFamily: "'DM Sans', sans-serif" }}
-                        value={step.instruction}
-                        onChange={e => updateStep(step.id, "instruction", e.target.value)}
-                        placeholder="Detailed step. Include what to look for, quantities, common mistakes..."
-                        data-testid={`input-step-instruction-${idx}`}
-                      />
-                    </div>
-                    <div style={{ marginBottom: 8 }}>
-                      <FieldLabel>Visual Cue</FieldLabel>
-                      <input className="form-input" style={{ padding: "5px 8px" }} value={step.visualCue ?? ""}
-                        onChange={e => updateStep(step.id, "visualCue", e.target.value)}
-                        placeholder="e.g. Oil shimmers; edges turn translucent"
-                        data-testid={`input-step-visual-${idx}`} />
-                    </div>
-                    <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 12, color: step.criticalPoint ? "#c0392b" : "#888070" }}>
-                      <input type="checkbox" checked={step.criticalPoint}
-                        onChange={e => updateStep(step.id, "criticalPoint", e.target.checked)}
-                        data-testid={`switch-critical-${idx}`}
-                        style={{ accentColor: "#c0392b" }}
-                      />
-                      <AlertTriangle size={12} style={{ color: "#c0392b" }} />
-                      Critical Control Point (CCP)
-                    </label>
-                  </div>
-                  <button type="button" onClick={() => removeStep(step.id)}
-                    style={{ background: "none", border: "none", cursor: "pointer", color: "#c8c0b0", padding: 2, flexShrink: 0 }}
-                    data-testid={`button-remove-step-${idx}`}>
-                    <X size={13} />
-                  </button>
-                </div>
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={(event: DragEndEvent) => {
+              const { active, over } = event;
+              if (over && active.id !== over.id) {
+                setSteps(prev => {
+                  const oldIdx = prev.findIndex(s => s.id === active.id);
+                  const newIdx = prev.findIndex(s => s.id === over.id);
+                  return arrayMove(prev, oldIdx, newIdx);
+                });
+              }
+            }}
+          >
+            <SortableContext items={steps.map(s => s.id)} strategy={verticalListSortingStrategy}>
+              <div style={{ marginBottom: 12 }} data-testid="steps-list">
+                {steps.map((step, idx) => (
+                  <SortableStepCard
+                    key={step.id}
+                    step={step}
+                    idx={idx}
+                    onUpdate={updateStep}
+                    onRemove={removeStep}
+                  />
+                ))}
               </div>
-            ))}
-          </div>
+            </SortableContext>
+          </DndContext>
           <button type="button" onClick={addStep}
             style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#014643", background: "none", border: "1.5px dashed #b8c8c6", borderRadius: 3, padding: "6px 14px", cursor: "pointer", marginBottom: 24, letterSpacing: "0.04em" }}
             data-testid="button-add-step">
