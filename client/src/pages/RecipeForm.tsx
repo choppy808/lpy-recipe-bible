@@ -676,7 +676,7 @@ export default function RecipeFormPage() {
               </select>
             </div>
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 24 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 10, marginBottom: 24 }}>
             <div>
               <FieldLabel>Author / Chef</FieldLabel>
               <input className="form-input" value={form.author} onChange={e => updateField("author", e.target.value)} placeholder="chops" data-testid="input-author" />
@@ -684,6 +684,14 @@ export default function RecipeFormPage() {
             <div>
               <FieldLabel>Version</FieldLabel>
               <input className="form-input" value={form.recipeVersion} onChange={e => updateField("recipeVersion", e.target.value)} placeholder="1.0" data-testid="input-version" />
+            </div>
+            <div>
+              <FieldLabel>Status</FieldLabel>
+              <select className="form-select" value={form.status} onChange={e => updateField("status", e.target.value)} data-testid="select-status">
+                <option value="draft">Draft</option>
+                <option value="active">Active</option>
+                <option value="archived">Archived</option>
+              </select>
             </div>
             <div>
               <FieldLabel>Date</FieldLabel>
