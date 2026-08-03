@@ -2,7 +2,7 @@ import { useParams, Link, useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { Recipe, Ingredient, Step } from "@shared/schema";
-import { ArrowLeft, Pencil, Printer, Trash2, AlertTriangle, ExternalLink } from "lucide-react";
+import { ArrowLeft, Pencil, Printer, Trash2, AlertTriangle, ExternalLink, FileDown } from "lucide-react";
 import { formatMinutes } from "./RecipeForm";
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
@@ -12,6 +12,35 @@ export default function RecipeViewPage() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const [batchScale, setBatchScale] = useState(1);
+  const [exporting, setExporting] = useState(false);
+
+  const exportPdf = async () => {
+    if (!recipe) return;
+    setExporting(true);
+    try {
+      const { default: jsPDF } = await import("jspdf");
+      const { default: html2canvas } = await import("html2canvas");
+      const el = document.getElementById("recipe-print-area");
+      if (!el) return;
+      const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: "#f0ebe1" });
+      const imgData = canvas.toDataURL("image/jpeg", 0.92);
+      const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+      const pageW = pdf.internal.pageSize.getWidth();
+      const pageH = pdf.internal.pageSize.getHeight();
+      const imgH = (canvas.height * pageW) / canvas.width;
+      let yPos = 0;
+      let remaining = imgH;
+      while (remaining > 0) {
+        pdf.addImage(imgData, "JPEG", 0, -yPos, pageW, imgH);
+        remaining -= pageH;
+        yPos += pageH;
+        if (remaining > 0) pdf.addPage();
+      }
+      pdf.save(`${recipe.recipeName.replace(/\s+/g, "_")}.pdf`);
+    } finally {
+      setExporting(false);
+    }
+  };
 
   // Fetch all recipe names for ingredient linking
   const { data: recipeNames } = useQuery<{ id: number; recipe_name: string }[]>({
@@ -101,6 +130,11 @@ export default function RecipeViewPage() {
             data-testid="button-print">
             <Printer size={13} /> Print
           </button>
+          <button type="button" onClick={exportPdf} disabled={exporting}
+            style={{ background: "rgba(255,255,255,0.12)", color: "#faf7f2", border: "none", borderRadius: 3, padding: "6px 14px", fontSize: 12, fontWeight: 600, cursor: exporting ? "wait" : "pointer", display: "flex", alignItems: "center", gap: 6, fontFamily: "'DM Sans', sans-serif", letterSpacing: "0.04em", opacity: exporting ? 0.6 : 1 }}
+            data-testid="button-export-pdf">
+            <FileDown size={13} /> {exporting ? "Exporting…" : "PDF"}
+          </button>
           <Link href={`/edit/${recipe.id}`}>
             <button type="button" style={{ background: "rgba(255,255,255,0.12)", color: "#faf7f2", border: "none", borderRadius: 3, padding: "6px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: 6, fontFamily: "'DM Sans', sans-serif", letterSpacing: "0.04em" }} data-testid="button-edit">
               <Pencil size={13} /> Edit
@@ -121,7 +155,7 @@ export default function RecipeViewPage() {
       </div>
 
       {/* Recipe card */}
-      <div style={{ maxWidth: 680, margin: "32px auto", padding: "0 20px 80px" }} data-testid="recipe-card">
+      <div id="recipe-print-area" style={{ maxWidth: 680, margin: "32px auto", padding: "0 20px 80px" }} data-testid="recipe-card">
         <div style={{ background: "#faf7f2", border: "1px solid #d4ccbc", borderRadius: 4, padding: "32px 36px" }}>
 
           {/* LPY Header */}
