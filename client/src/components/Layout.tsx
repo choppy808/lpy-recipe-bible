@@ -1,6 +1,6 @@
 import { useHashLocation } from "wouter/use-hash-location";
 import { Link } from "wouter";
-import { BookOpen, PlusCircle, Users, LogOut } from "lucide-react";
+import { BookOpen, PlusCircle, Users, LogOut, Archive } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 
 export default function Layout({ children }: { children: React.ReactNode }) {
@@ -10,6 +10,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const NAV = [
     { href: "/", label: "Recipe Library", icon: BookOpen },
     { href: "/new", label: "New Recipe", icon: PlusCircle },
+    { href: "/archive", label: "Archive", icon: Archive },
     ...(user?.role === "admin" ? [{ href: "/users", label: "Team", icon: Users }] : []),
   ];
 

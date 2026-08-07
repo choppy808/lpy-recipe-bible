@@ -9,6 +9,7 @@ import RecipeFormPage from "./pages/RecipeForm";
 import RecipeViewPage from "./pages/RecipeView";
 import LoginPage from "./pages/Login";
 import UsersPage from "./pages/Users";
+import ArchivePage from "./pages/Archive";
 import NotFound from "./pages/not-found";
 import Sidebar from "./components/Layout";
 
@@ -38,6 +39,11 @@ function AppRoutes() {
         <Route path="/new" component={RecipeFormPage} />
         <Route path="/edit/:id" component={RecipeFormPage} />
         <Route path="/recipe/:id" component={RecipeViewPage} />
+        <Route path="/archive" component={() => (
+          <Sidebar>
+            <ArchivePage />
+          </Sidebar>
+        )} />
         <Route path="/users" component={() => (
           user.role === "admin" ? (
             <Sidebar>

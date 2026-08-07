@@ -321,6 +321,14 @@ app.patch("/api/recipes/:id", requireAuth, async (req, res) => {
   try {
     const data = insertRecipeSchema.partial().parse(req.body);
     const now = Date.now();
+    // Snapshot current recipe into version history before overwriting
+    const { rows: current } = await pool.query(`SELECT * FROM recipes WHERE id = $1`, [id]);
+    if (current[0]) {
+      await pool.query(
+        `INSERT INTO recipe_versions (recipe_id, version_label, saved_by, snapshot, created_at) VALUES ($1, $2, $3, $4, $5)`,
+        [id, current[0].recipe_version ?? "1.0", (req as any).user?.username ?? "unknown", JSON.stringify(current[0]), now]
+      );
+    }
     const fieldMap: Record<string, string> = {
       recipeName: "recipe_name", nameZh: "name_zh", concept: "concept",
       category: "category", subcategory: "subcategory", station: "station",
@@ -397,6 +405,61 @@ app.delete("/api/recipes/:id/photo", requireAuth, async (req, res) => {
     res.json({ success: true });
   } catch (e: any) {
     res.status(500).json({ error: "Failed to delete photo", detail: e.message });
+  }
+});
+
+// GET /api/recipes/:id/versions — list version snapshots for a recipe
+app.get("/api/recipes/:id/versions", requireAuth, async (req, res) => {
+  const id = parseInt(req.params.id as string);
+  if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, recipe_id, version_label, saved_by, created_at FROM recipe_versions WHERE recipe_id = $1 ORDER BY created_at DESC`,
+      [id]
+    );
+    res.json(rows);
+  } catch (e: any) {
+    res.status(500).json({ error: "Failed to fetch versions", detail: e.message });
+  }
+});
+
+// GET /api/versions/:versionId — get full snapshot of a specific version
+app.get("/api/versions/:versionId", requireAuth, async (req, res) => {
+  const versionId = parseInt(req.params.versionId as string);
+  if (isNaN(versionId)) return res.status(400).json({ error: "Invalid id" });
+  try {
+    const { rows } = await pool.query(`SELECT * FROM recipe_versions WHERE id = $1`, [versionId]);
+    if (!rows[0]) return res.status(404).json({ error: "Version not found" });
+    res.json(rows[0]);
+  } catch (e: any) {
+    res.status(500).json({ error: "Failed to fetch version", detail: e.message });
+  }
+});
+
+// POST /api/versions/:versionId/restore — restore a snapshot as the current recipe
+app.post("/api/versions/:versionId/restore", requireAuth, async (req, res) => {
+  const versionId = parseInt(req.params.versionId as string);
+  if (isNaN(versionId)) return res.status(400).json({ error: "Invalid id" });
+  try {
+    const { rows: vRows } = await pool.query(`SELECT * FROM recipe_versions WHERE id = $1`, [versionId]);
+    if (!vRows[0]) return res.status(404).json({ error: "Version not found" });
+    const snap = vRows[0].snapshot;
+    const now = Date.now();
+    // Snapshot the current recipe first
+    const { rows: current } = await pool.query(`SELECT * FROM recipes WHERE id = $1`, [snap.id]);
+    if (current[0]) {
+      await pool.query(
+        `INSERT INTO recipe_versions (recipe_id, version_label, saved_by, snapshot, created_at) VALUES ($1, $2, $3, $4, $5)`,
+        [snap.id, current[0].recipe_version ?? "1.0", (req as any).user?.username ?? "unknown", JSON.stringify(current[0]), now]
+      );
+    }
+    const { rows } = await pool.query(
+      `UPDATE recipes SET recipe_name=$1,name_zh=$2,category=$3,subcategory=$4,station=$5,recipe_version=$6,status=$7,author=$8,yield_qty=$9,yield_unit=$10,portion_size=$11,portion_unit=$12,batch_multiplier=$13,prep_time=$14,cook_time=$15,total_time=$16,shelf_life=$17,storage_method=$18,ingredients=$19,steps=$20,final_appearance=$21,final_texture=$22,final_flavor=$23,final_temp=$24,plating_notes=$25,allergens=$26,dietary_flags=$27,food_cost_target=$28,chef_notes=$29,common_mistakes=$30,critical_points=$31,updated_at=$32 WHERE id=$33 RETURNING *`,
+      [snap.recipe_name,snap.name_zh,snap.category,snap.subcategory,snap.station,snap.recipe_version,snap.status,snap.author,snap.yield_qty,snap.yield_unit,snap.portion_size,snap.portion_unit,snap.batch_multiplier,snap.prep_time,snap.cook_time,snap.total_time,snap.shelf_life,snap.storage_method,snap.ingredients,snap.steps,snap.final_appearance,snap.final_texture,snap.final_flavor,snap.final_temp,snap.plating_notes,snap.allergens,snap.dietary_flags,snap.food_cost_target,snap.chef_notes,snap.common_mistakes,snap.critical_points,now,snap.id]
+    );
+    res.json(rowToRecipe(rows[0]));
+  } catch (e: any) {
+    res.status(500).json({ error: "Failed to restore version", detail: e.message });
   }
 });
 

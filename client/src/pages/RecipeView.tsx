@@ -4,7 +4,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { Recipe, Ingredient, Step } from "@shared/schema";
 import { ArrowLeft, Pencil, Printer, Trash2, AlertTriangle, ExternalLink, FileDown } from "lucide-react";
 import { formatMinutes } from "./RecipeForm";
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { useToast } from "@/hooks/use-toast";
 
 export default function RecipeViewPage() {
@@ -13,6 +13,8 @@ export default function RecipeViewPage() {
   const { toast } = useToast();
   const [batchScale, setBatchScale] = useState(1);
   const [exporting, setExporting] = useState(false);
+  const [showVersions, setShowVersions] = useState(false);
+  const [restoringId, setRestoringId] = useState<number | null>(null);
 
   const exportPdf = async () => {
     if (!recipe) return;
@@ -43,6 +45,32 @@ export default function RecipeViewPage() {
   };
 
   // Fetch all recipe names for ingredient linking
+  const { data: versions, refetch: refetchVersions } = useQuery<any[]>({
+    queryKey: ["/api/recipes", params.id, "versions"],
+    queryFn: async () => {
+      const res = await apiRequest("GET", `/api/recipes/${params.id}/versions`);
+      return res.json();
+    },
+    enabled: showVersions,
+  });
+
+  const restoreMutation = useMutation({
+    mutationFn: async (versionId: number) => {
+      const res = await apiRequest("POST", `/api/versions/${versionId}/restore`);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/recipes", params.id] });
+      refetchVersions();
+      toast({ title: "Version restored", description: "The recipe has been rolled back." });
+      setRestoringId(null);
+    },
+    onError: () => {
+      toast({ title: "Restore failed", description: "Could not restore this version.", variant: "destructive" });
+      setRestoringId(null);
+    },
+  });
+
   const { data: recipeNames } = useQuery<{ id: number; recipe_name: string }[]>({
     queryKey: ["/api/recipes/names"],
     staleTime: 60000,
@@ -390,6 +418,62 @@ export default function RecipeViewPage() {
           </div>
 
         </div>
+      </div>
+
+      {/* Version History Panel */}
+      <div className="no-print" style={{ maxWidth: 680, margin: "0 auto", padding: "0 20px 60px" }}>
+        <button
+          type="button"
+          onClick={() => setShowVersions(v => !v)}
+          style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, fontWeight: 600, color: "#014643", background: "none", border: "1.5px solid #b8c8c6", borderRadius: 3, padding: "7px 16px", cursor: "pointer", letterSpacing: "0.04em", marginBottom: 12, fontFamily: "'DM Sans', sans-serif" }}
+          data-testid="button-toggle-versions"
+        >
+          <span style={{ fontSize: 14 }}>{showVersions ? "▾" : "▸"}</span> Version History
+        </button>
+
+        {showVersions && (
+          <div style={{ background: "#faf7f2", border: "1px solid #d4ccbc", borderRadius: 4, overflow: "hidden" }}>
+            {!versions || versions.length === 0 ? (
+              <div style={{ padding: "20px 24px", fontSize: 13, color: "#888", fontFamily: "'DM Sans', sans-serif" }}>
+                No previous versions saved yet. Every time you save an edit, the prior version is stored here.
+              </div>
+            ) : (
+              <table style={{ width: "100%", borderCollapse: "collapse", fontFamily: "'DM Sans', sans-serif", fontSize: 13 }}>
+                <thead>
+                  <tr style={{ borderBottom: "1px solid #d4ccbc", background: "#f0ebe1" }}>
+                    <th style={{ textAlign: "left", padding: "8px 16px", fontWeight: 700, fontSize: 10, letterSpacing: "0.08em", textTransform: "uppercase", color: "#888" }}>Version</th>
+                    <th style={{ textAlign: "left", padding: "8px 16px", fontWeight: 700, fontSize: 10, letterSpacing: "0.08em", textTransform: "uppercase", color: "#888" }}>Saved By</th>
+                    <th style={{ textAlign: "left", padding: "8px 16px", fontWeight: 700, fontSize: 10, letterSpacing: "0.08em", textTransform: "uppercase", color: "#888" }}>Date</th>
+                    <th style={{ padding: "8px 16px" }}></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {versions.map((v: any, i: number) => (
+                    <tr key={v.id} style={{ borderBottom: i < versions.length - 1 ? "1px solid #ece7de" : "none" }}>
+                      <td style={{ padding: "10px 16px", fontFamily: "'DM Mono', monospace", color: "#014643", fontWeight: 600 }}>v{v.version_label ?? "—"}</td>
+                      <td style={{ padding: "10px 16px", color: "#666" }}>{v.saved_by ?? "—"}</td>
+                      <td style={{ padding: "10px 16px", color: "#666" }}>{new Date(Number(v.created_at)).toLocaleString()}</td>
+                      <td style={{ padding: "10px 16px", textAlign: "right" }}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setRestoringId(v.id);
+                            restoreMutation.mutate(v.id);
+                          }}
+                          disabled={restoreMutation.isPending && restoringId === v.id}
+                          style={{ fontSize: 11, fontWeight: 600, color: "#014643", background: "none", border: "1px solid #014643", borderRadius: 3, padding: "4px 12px", cursor: "pointer", opacity: restoreMutation.isPending && restoringId === v.id ? 0.5 : 1 }}
+                          data-testid={`button-restore-version-${v.id}`}
+                        >
+                          {restoreMutation.isPending && restoringId === v.id ? "Restoring…" : "Restore"}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
